@@ -4,17 +4,9 @@ import time
 import struct
 import random
 import math
-
-# Framing constants (matches repo style)
-HEADER_SIZE = 8
-CLASS_ID_SIZE = 3
-
-MSG_JOIN_REQUEST = 1
-MSG_SERVER_ACCEPT = 2
-MSG_PONG = 3
-MSG_WORLD_SNAPSHOT = 4
-MSG_COMMAND = 5
-MSG_PING = 6
+import network
+from player import Player
+from world import Coin
 
 HOST = "0.0.0.0"
 PORT = 9999
@@ -22,36 +14,6 @@ TICK_RATE = 60
 MAP_SIZE = 2.0
 PLAYER_RADIUS = 0.05
 COIN_RADIUS = 0.05
-
-def pack_message(class_id, payload=b''):
-    body = f"{class_id:03}".encode('ascii') + payload
-    header = f"{len(body):08}".encode('ascii')
-    return header + body
-
-def unpack_message(data):
-    if len(data) < HEADER_SIZE + CLASS_ID_SIZE:
-        return None, None
-    body_size = int(data[:HEADER_SIZE].decode('ascii'))
-    body = data[HEADER_SIZE:HEADER_SIZE + body_size]
-    class_id = int(body[:CLASS_ID_SIZE].decode('ascii'))
-    payload = body[CLASS_ID_SIZE:]
-    return class_id, payload
-
-class Player:
-    def __init__(self, client_id, addr):
-        self.id = client_id
-        self.addr = addr
-        self.x = 0.0
-        self.y = 0.0
-        self.score = 0
-        self.inputs = []  # list of (seq, dx, dy, client_ts, recv_ts)
-        self.last_seq = 0
-
-class Coin:
-    def __init__(self, coin_id, x, y):
-        self.id = coin_id
-        self.x = x
-        self.y = y
 
 class GameServer:
     def __init__(self):
@@ -89,7 +51,7 @@ class GameServer:
         while self.running:
             try:
                 data, addr = self.sock.recvfrom(65536)
-                class_id, payload = unpack_message(data)
+                class_id, payload = network.unpack_message(data)
                 if class_id is None:
                     continue
                 self.process_packet(class_id, payload, addr)
@@ -100,7 +62,7 @@ class GameServer:
 
     def process_packet(self, class_id, payload, addr):
         now = time.time()
-        if class_id == MSG_JOIN_REQUEST:
+        if class_id == network.MSG_JOIN_REQUEST:
             # payload: desired client id (uint32)
             desired = struct.unpack_from('!I', payload, 0)[0] if len(payload) >= 4 else None
             with self.lock:
@@ -115,10 +77,10 @@ class GameServer:
                 self.client_id_map[assigned] = p
             # send accept with assigned id
             payload = struct.pack('!I', assigned)
-            self.sock.sendto(pack_message(MSG_SERVER_ACCEPT, payload), addr)
+            self.sock.sendto(network.pack_message(network.MSG_SERVER_ACCEPT, payload), addr)
             print(f"Client {assigned} joined from {addr}")
 
-        elif class_id == MSG_COMMAND:
+        elif class_id == network.MSG_COMMAND:
             # payload: seq(uint32), dx(float), dy(float), client_ts(double)
             if addr not in self.clients:
                 return
@@ -127,9 +89,9 @@ class GameServer:
                 p = self.clients[addr]
                 p.inputs.append((seq, dx, dy, client_ts, now))
 
-        elif class_id == MSG_PING:
+        elif class_id == network.MSG_PING:
             # echo pong: send back timestamp
-            self.sock.sendto(pack_message(MSG_PONG, payload), addr)
+            self.sock.sendto(network.pack_message(network.MSG_PONG, payload), addr)
 
     def game_loop(self):
         last_tick = time.time()
@@ -255,7 +217,7 @@ class GameServer:
         for c in self.coins:
             payload.extend(struct.pack('!Iff', c.id, c.x, c.y))
 
-        msg = pack_message(MSG_WORLD_SNAPSHOT, bytes(payload))
+        msg = network.pack_message(network.MSG_WORLD_SNAPSHOT, bytes(payload))
         # send to all clients
         for addr in list(self.clients.keys()):
             try:
