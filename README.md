@@ -74,3 +74,9 @@ Adapted from:
 
 - [Grass Background](https://depositphotos.com/vector/grass-pixel-art-background-flower-garden-575075648.html)
 - [Coin](https://www.freepik.com/free-vector/video-game-coin_136488507.html)
+
+## References
+
+- [Overwatch Gameplay Architecture and Netcode, Tim Ford, GDC 2017](https://www.youtube.com/watch?v=W3aieHjyNvw&t=2275s)
+- [Networking for Virtual Worlds](https://youtube.com/playlist?list=PLoRL6aS9crowO6h2SL7k9lUV5eeC6uqnx&si=XM3P13_WeqbMQINY)
+- [Game Networking Articles by Glenn Fiedler](https://gafferongames.com/categories/networking/)

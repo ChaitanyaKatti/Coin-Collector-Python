@@ -221,10 +221,13 @@ class GameServer:
         # Apply inputs and movement flags
         for p in players:
             self.process_player_inputs(p, dt)
-            self.resolve_player_coin_collisions(p)
 
         # Resolve player–player collisions
         self.resolve_player_player_collisions(players)
+        
+        # Resolve player–coin collisions
+        for p in players:
+            self.resolve_player_coin_collisions(p)
 
     def broadcast_state(self):
         # payload: server_time(double) | num_players(uint32) |

@@ -20,7 +20,7 @@ random.seed(42)
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 9999
 WIDTH, HEIGHT = 720, 720
-INTERPOLATION_DELAY = 0.15  # seconds
+INTERPOLATION_DELAY = (1/60.0) # 1 tick
 PLAYER_RADIUS = 0.075
 PLAYER_SPEED = 1.0  # units per second
 COIN_RADIUS = 0.05
@@ -111,7 +111,7 @@ class Client:
             self.process_packet(data)
 
         # periodic ping for RTT every second
-        if now - self.last_ping > 1000.0:
+        if now - self.last_ping > 1.0:
             payload = struct.pack('!d', time.time()) # Pack current time into ping payload
             self.send_packet(network.pack_message(network.MSG_PING, payload))
             self.last_ping = now
@@ -192,7 +192,7 @@ class Client:
                 if pid == self.client_id: # Do not interpolate local player
                     continue
                 if pid not in self.players:
-                    # initialize interpolation state (snap->target)
+                    # initialize interpolation state (snap->target), x, y is current pos, tx, ty is target, t0, t1 is time range
                     self.players[pid] = {'x': x, 'y': y, 'tx': x, 'ty': y, 't0': now_local, 't1': now_local}
                 else:
                     p = self.players[pid]
