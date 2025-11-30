@@ -24,6 +24,7 @@ class GameServer:
         self.sock.setblocking(False)
         self.clients = {}          # addr -> Player
         self.client_id_map = {}    # id -> Player
+        self.last_client_recv = {}  # addr -> timestamp
         self.coins = []
         self.next_coin_id = 0
         self.running = True
@@ -68,10 +69,8 @@ class GameServer:
             client_id = struct.unpack_from('!I', payload, 0)[0]
             
             with self.lock:
-                if client_id in self.client_id_map:
-                    # ID already taken
+                if client_id in self.client_id_map: # ID already taken
                     self.sock.sendto(network.pack_message(network.MSG_JOIN_REJECT), addr)
-                    print(f"Rejected client {client_id} from {addr}: ID already running")
                     return
 
                 p = Player(client_id, addr)
@@ -126,7 +125,16 @@ class GameServer:
         while p.inputs:
             seq, dx, dy, client_ts, recv_ts = p.inputs[0]
             if seq != p.last_seq + 1:
+                last_recv = self.last_client_recv.get(p.addr, 0.0)
+                print(f"Out of order input from player {p.id}: expected {p.last_seq + 1}, got {seq}")
+                # Check if too much time has passed since last in-order packet
+                if time.time() - last_recv > 0.100: # 1 second timeout
+                    print(f"Skipping to seq {seq} for player {p.id} due to timeout")
+                    p.last_seq = seq - 1
+                    continue
                 break # wait for next in-order packet
+            else:
+                self.last_client_recv[p.addr] = time.time()
             p.inputs.pop(0)
 
             if dx != 0 or dy != 0: # mark movement for collision logic

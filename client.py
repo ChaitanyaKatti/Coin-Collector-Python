@@ -30,7 +30,7 @@ class Client:
         # Networking
         real_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         real_sock.setblocking(False)
-        self.sock = network.SimulatedSocket(real_sock, latency=0.200, jitter=0.010)
+        self.sock = network.SimulatedSocket(real_sock, latency=0.200, jitter=0.010, packet_loss=0.0)
         
         self.server_addr = (SERVER_IP, SERVER_PORT)
 
@@ -83,8 +83,10 @@ class Client:
             
             if connected:
                 break
-            time.sleep(0.01)
-            
+            else:
+                time.sleep(0.100) # Try again after 100ms
+                self.send_packet(network.pack_message(network.MSG_JOIN_REQUEST, payload))
+
         if not connected:
             print("Server not connected")
             self.gui.shutdown()
@@ -280,9 +282,11 @@ class Client:
             imgui.text(f"RTT (estimated): {self.rtt*1000:.1f}ms")
             imgui.text(f"Latency: {self.sock.latency*1000:.1f}ms")
             imgui.text(f"Jitter : {self.sock.jitter*1000:.1f}ms")
-            _, self.sock.latency = imgui.slider_float("Latency (s)", self.sock.latency, 0.0, 1.0)
-            _, self.sock.jitter = imgui.slider_float("Jitter (s)", self.sock.jitter, 0.0, 0.1)
-            _, self.debug_show_server = imgui.checkbox("Show Server Debug Positions", self.debug_show_server)
+            imgui.text(f"Packet Loss % : {self.sock.packet_loss*100:.1f}%")
+            self.sock.latency = imgui.slider_int("Latency (ms)", self.sock.latency * 1000, 0, 1000)[1] / 1000.0
+            self.sock.jitter = imgui.slider_int("Jitter (ms)", self.sock.jitter * 1000, 0, 100)[1] / 1000.0
+            self.sock.packet_loss = imgui.slider_int("Packet Loss %", self.sock.packet_loss * 100, 0, 90)[1] / 100.0
+            self.debug_show_server = imgui.checkbox("Show Server Debug Positions", self.debug_show_server)[1]
             imgui.end()
 
             self.gui.end_frame()

@@ -34,10 +34,11 @@ def unpack_message(data):
         return None, None
 
 class SimulatedSocket:
-    def __init__(self, sock, latency=0.0, jitter=0.0):
+    def __init__(self, sock, latency=0.0, jitter=0.0, packet_loss=0.0):
         self.sock = sock
         self.latency = latency
         self.jitter = jitter
+        self.packet_loss = packet_loss
         self.queue = []  # heap of (time, type, data, addr)
 
     def sendto(self, data, addr):
@@ -62,12 +63,15 @@ class SimulatedSocket:
         # Process all events whose time has passed
         while self.queue and self.queue[0][0] <= now: # Peek the latest scheduled packet
             t, type_, data, addr = heapq.heappop(self.queue) # Pop the packet
-            if type_ == 'send':
-                try:
-                    self.sock.sendto(data, addr) # Send the packet through the real socket
-                except Exception:
-                    pass
+            if random.random() > self.packet_loss: # packet loss
+                if type_ == 'send':
+                        try:
+                            self.sock.sendto(data, addr) # Send the packet through the real socket
+                        except Exception:
+                            pass
+                else:
+                    ready_packets.append((data, addr)) # Collect received packets
             else:
-                ready_packets.append((data, addr)) # Collect received packets
+                print("dropped outgoing packet")
 
         return ready_packets
