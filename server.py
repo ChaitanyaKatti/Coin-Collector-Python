@@ -124,17 +124,23 @@ class GameServer:
         # Process packets in order,
         while p.inputs:
             seq, dx, dy, client_ts, recv_ts = p.inputs[0]
-            if seq != p.last_seq + 1:
+
+            if seq <= p.last_seq: # duplicate / old packet
+                p.inputs.pop(0)
+                continue
+
+            if seq != p.last_seq + 1: # out of order packet
                 last_recv = self.last_client_recv.get(p.addr, 0.0)
-                print(f"Out of order input from player {p.id}: expected {p.last_seq + 1}, got {seq}")
+                print(f"Out of order input from player {p.id}: expected {p.last_seq + 1}, got {seq}. [HIGH VARIABILITY IN LATENCY]")
                 # Check if too much time has passed since last in-order packet
-                if time.time() - last_recv > 0.100: # 1 second timeout
+                if time.time() - last_recv > 0.100: # 100 ms timeout
                     print(f"Skipping to seq {seq} for player {p.id} due to timeout")
                     p.last_seq = seq - 1
-                    continue
-                break # wait for next in-order packet
+                else:
+                    break # exit loop, wait for in-order packet
             else:
                 self.last_client_recv[p.addr] = time.time()
+  
             p.inputs.pop(0)
 
             if dx != 0 or dy != 0: # mark movement for collision logic
@@ -147,8 +153,6 @@ class GameServer:
                 dxn, dyn = dx / norm, dy / norm
                 p.x += dxn * PLAYER_SPEED * (1.0 / 60.0)
                 p.y += dyn * PLAYER_SPEED * (1.0 / 60.0)
-                p.x = max(-1, min(1, p.x))
-                p.y = max(-1, min(1, p.y))
 
             p.last_seq = max(p.last_seq, seq)
         
