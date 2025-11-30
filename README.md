@@ -10,7 +10,9 @@ A real-time multiplayer Coin Collector game using Python, UDP, and OpenGL (via g
 - `Pillow`
 
 ## Setup
+
 1. Create a virtual environment:
+
    ```bash
    # Create virtual environment, use 3.11+
    python3.11 -m venv venv 
@@ -19,7 +21,9 @@ A real-time multiplayer Coin Collector game using Python, UDP, and OpenGL (via g
    source venv/bin/activate  # Linux/Mac
    venv\Scripts\activate  # Windows
    ```
+
 2. Install dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -27,21 +31,26 @@ A real-time multiplayer Coin Collector game using Python, UDP, and OpenGL (via g
 ## Running the Game
 
 ### 1. Start the Server
+
 ```bash
 python server.py
 ```
+
 The server listens on port 9999.
 
 ### 2. Start Clients
+
 Open multiple terminal windows and run:
+
 ```bash
 python client.py 1 # Client 1
-```
+
 ```bash
 python client.py 2 # Client 2
 ```
 
 ## Features
+
 - **Authoritative Server**: Handles movement, collisions, and scoring.
 - **UDP Networking**: Fast, real-time communication.
 - **Client-Side Prediction**: Predicts movement based on inputs.
@@ -50,11 +59,13 @@ python client.py 2 # Client 2
 - **Reconciliation**: Client corrects its position based on server updates.
 
 ## Controls
+
 - **Arrow Keys**: Move
 - **Debug UI**: Adjust simulated latency.
 
-
 ## Game Assets
+
 Adapted from:
+
 - [Grass Background](https://depositphotos.com/vector/grass-pixel-art-background-flower-garden-575075648.html)
 - [Coin](https://www.freepik.com/free-vector/video-game-coin_136488507.html)
