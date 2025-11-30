@@ -299,8 +299,8 @@ class Client:
 
     @staticmethod
     def get_player_color(client_id):
-        h = random.Random(client_id).random()  # consistent per client_id
-        r, g, b = colorsys.hsv_to_rgb(h, 0.5, 0.5)
+        h = random.Random(client_id * 9973).random()  # consistent per client_id
+        r, g, b = colorsys.hsv_to_rgb(h, 0.5, 0.6)
         return (r, g, b)
 
 if __name__ == "__main__":

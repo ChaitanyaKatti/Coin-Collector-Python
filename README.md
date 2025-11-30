@@ -2,6 +2,11 @@
 
 A real-time multiplayer Coin Collector game using Python, UDP, and OpenGL (via glfw/imgui).
 
+## Demo
+<p align="center">
+  <img src="./assets/demo.gif" alt="Demo Video">
+</p>
+
 ## Requirements
 
 - Python 3.11+
@@ -46,7 +51,6 @@ Open multiple terminal windows and run:
 ```bash
 python client.py 1 # Client 1
 
-```bash
 python client.py 2 # Client 2
 ```
 
