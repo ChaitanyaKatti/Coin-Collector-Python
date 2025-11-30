@@ -12,8 +12,10 @@ HOST = "0.0.0.0"
 PORT = 9999
 TICK_RATE = 60
 MAP_SIZE = 2.0
-PLAYER_RADIUS = 0.05
+PLAYER_RADIUS = 0.075
+PLAYER_SPEED = 1.0  # units per second
 COIN_RADIUS = 0.05
+BORDER_SIZE = 2*(8/1024)
 
 class GameServer:
     def __init__(self):
@@ -22,7 +24,6 @@ class GameServer:
         self.sock.setblocking(False)
         self.clients = {}          # addr -> Player
         self.client_id_map = {}    # id -> Player
-        self.next_client_id = 1000
         self.coins = []
         self.next_coin_id = 0
         self.running = True
@@ -51,45 +52,53 @@ class GameServer:
         while self.running:
             try:
                 data, addr = self.sock.recvfrom(65536)
-                class_id, payload = network.unpack_message(data)
-                if class_id is None:
+                msg_type, payload = network.unpack_message(data)
+                if msg_type is None:
                     continue
-                self.process_packet(class_id, payload, addr)
+                self.process_packet(msg_type, payload, addr)
             except BlockingIOError:
                 time.sleep(0.001)
             except Exception as e:
                 print("recv error", e)
 
-    def process_packet(self, class_id, payload, addr):
+    def process_packet(self, msg_type, payload, addr):
         now = time.time()
-        if class_id == network.MSG_JOIN_REQUEST:
+        if msg_type == network.MSG_JOIN_REQUEST:
             # payload: desired client id (uint32)
-            desired = struct.unpack_from('!I', payload, 0)[0] if len(payload) >= 4 else None
+            client_id = struct.unpack_from('!I', payload, 0)[0]
+            
             with self.lock:
-                # assign id
-                assigned = self.next_client_id
-                self.next_client_id += 1
-                p = Player(assigned, addr)
-                # place randomly
+                if client_id in self.client_id_map:
+                    # ID already taken
+                    self.sock.sendto(network.pack_message(network.MSG_JOIN_REJECT), addr)
+                    print(f"Rejected client {client_id} from {addr}: ID already running")
+                    return
+
+                p = Player(client_id, addr)
+
+                # place roughly in center
                 p.x = random.uniform(-0.5, 0.5)
                 p.y = random.uniform(-0.5, 0.5)
                 self.clients[addr] = p
-                self.client_id_map[assigned] = p
-            # send accept with assigned id
-            payload = struct.pack('!I', assigned)
-            self.sock.sendto(network.pack_message(network.MSG_SERVER_ACCEPT, payload), addr)
-            print(f"Client {assigned} joined from {addr}")
+                self.client_id_map[client_id] = p
+                # Resolve collisions with existing players
+                self.resolve_player_player_collisions(list(self.clients.values()))
 
-        elif class_id == network.MSG_COMMAND:
+            # send accept with desired id
+            payload = struct.pack('!I', client_id)
+            self.sock.sendto(network.pack_message(network.MSG_SERVER_ACCEPT, payload), addr)
+            print(f"Client {client_id} joined from {addr}")
+
+        elif msg_type == network.MSG_COMMAND:
             # payload: seq(uint32), dx(float), dy(float), client_ts(double)
             if addr not in self.clients:
                 return
             seq, dx, dy, client_ts = struct.unpack_from('!Iffd', payload, 0)
             with self.lock:
-                p = self.clients[addr]
+                p = self.clients[addr] # type: Player
                 p.inputs.append((seq, dx, dy, client_ts, now))
 
-        elif class_id == network.MSG_PING:
+        elif msg_type == network.MSG_PING:
             # echo pong: send back timestamp
             self.sock.sendto(network.pack_message(network.MSG_PONG, payload), addr)
 
@@ -106,16 +115,21 @@ class GameServer:
                 self.update_physics(dt)
                 self.broadcast_state()
 
-    def process_player_inputs(self, p, dt):
+    def process_player_inputs(self, p: Player, dt: float):
         """Apply player inputs, update movement direction flags."""
-        p.inputs.sort(key=lambda x: x[0])
+        p.inputs.sort(key=lambda x: x[0]) # sort by input seq
 
-        moved = False
+        moved = False # Tag for collision resolution
         last_dx, last_dy = 0.0, 0.0
 
-        for seq, dx, dy, client_ts, recv_ts in p.inputs:
-            # mark movement for collision logic
-            if dx != 0 or dy != 0:
+        # Process packets in order,
+        while p.inputs:
+            seq, dx, dy, client_ts, recv_ts = p.inputs[0]
+            if seq != p.last_seq + 1:
+                break # wait for next in-order packet
+            p.inputs.pop(0)
+
+            if dx != 0 or dy != 0: # mark movement for collision logic
                 moved = True
                 last_dx, last_dy = dx, dy
 
@@ -123,19 +137,17 @@ class GameServer:
             norm = math.hypot(dx, dy)
             if norm > 0:
                 dxn, dyn = dx / norm, dy / norm
-                speed = 1.0
-                p.x += dxn * speed * (1.0 / 60.0)
-                p.y += dyn * speed * (1.0 / 60.0)
+                p.x += dxn * PLAYER_SPEED * (1.0 / 60.0)
+                p.y += dyn * PLAYER_SPEED * (1.0 / 60.0)
                 p.x = max(-1, min(1, p.x))
                 p.y = max(-1, min(1, p.y))
 
             p.last_seq = max(p.last_seq, seq)
-
-        p.inputs.clear()
+        
         p._moved = moved
         p._last_dir = (last_dx, last_dy)
 
-    def resolve_player_coin_collisions(self, p):
+    def resolve_player_coin_collisions(self, p: Player):
         for coin in self.coins[:]:
             dist = math.hypot(p.x - coin.x, p.y - coin.y)
             if dist < (PLAYER_RADIUS + COIN_RADIUS):
@@ -143,14 +155,14 @@ class GameServer:
                 self.coins.remove(coin)
                 self.spawn_coin()
 
-    def resolve_player_player_collisions(self, players):
+    def resolve_player_player_collisions(self, players: list[Player]):
         """Push players apart based on relative motion history."""
         R = PLAYER_RADIUS
         N = len(players)
 
         for i in range(N):
+            a = players[i]
             for j in range(i + 1, N):
-                a = players[i]
                 b = players[j]
 
                 dx = b.x - a.x
@@ -167,8 +179,8 @@ class GameServer:
                     nx = dx / dist
                     ny = dy / dist
 
-                    a_moved = getattr(a, "_moved", False)
-                    b_moved = getattr(b, "_moved", False)
+                    a_moved = a._moved
+                    b_moved = b._moved
 
                     # weight rules:
                     if a_moved and not b_moved:
@@ -178,7 +190,7 @@ class GameServer:
                     elif a_moved and b_moved:
                         w_a, w_b = 0.5, 0.5
                     else:
-                        continue  # idle–idle, no push
+                        w_a, w_b = 0.5, 0.5
 
                     # apply displacement
                     a.x -= nx * overlap * w_a
@@ -186,22 +198,19 @@ class GameServer:
                     b.x += nx * overlap * w_b
                     b.y += ny * overlap * w_b
 
-                    # clamp to bounds
-                    a.x = max(-1, min(1, a.x))
-                    a.y = max(-1, min(1, a.y))
-                    b.x = max(-1, min(1, b.x))
-                    b.y = max(-1, min(1, b.y))
+            # clamp to bounds
+            a.x = max(-1 + PLAYER_RADIUS + BORDER_SIZE, min(1-PLAYER_RADIUS-BORDER_SIZE, a.x))
+            a.y = max(-1 + PLAYER_RADIUS + BORDER_SIZE, min(1-PLAYER_RADIUS-BORDER_SIZE, a.y))
 
-
-    def update_physics(self, dt):
+    def update_physics(self, dt: float):
         players = list(self.client_id_map.values())
 
-        # 1. Apply inputs and movement flags
+        # Apply inputs and movement flags
         for p in players:
             self.process_player_inputs(p, dt)
             self.resolve_player_coin_collisions(p)
 
-        # 2. Resolve player–player collisions
+        # Resolve player–player collisions
         self.resolve_player_player_collisions(players)
 
     def broadcast_state(self):
