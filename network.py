@@ -1,6 +1,6 @@
 import heapq
-import time
 import random
+import time
 
 # Framing constants
 HEADER_SIZE = 8

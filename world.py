@@ -7,5 +7,5 @@ class Coin:
 class Snapshot:
     def __init__(self, server_time, players, coins):
         self.server_time = server_time
-        self.players = players  # dict id -> (x,y,score,last_seq)
+        self.players = players  # client_id -> (x,y,score,last_seq)
         self.coins = coins

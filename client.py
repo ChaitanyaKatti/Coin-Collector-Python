@@ -1,16 +1,18 @@
-import glfw
-import imgui
-import socket
-import time
-import struct
-import sys
+import colorsys
 import math
 import random
+import socket
+import struct
+import sys
+import time
 from collections import deque
-import colorsys
+
+import glfw
+import imgui
+
 import network
-from world import Snapshot
 from gui import GUI
+from world import Snapshot
 
 random.seed(42)
 
@@ -26,12 +28,12 @@ COIN_RADIUS = 0.05
 class Client:
     def __init__(self, client_id):
         self.client_id = client_id
-        
+
         # Networking
         real_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         real_sock.setblocking(False)
         self.sock = network.SimulatedSocket(real_sock, latency=0.200, jitter=0.010, packet_loss=0.0)
-        
+
         self.server_addr = (SERVER_IP, SERVER_PORT)
 
         # Game State
@@ -60,7 +62,7 @@ class Client:
         # register (join)
         payload = struct.pack('!I', self.client_id)
         self.send_packet(network.pack_message(network.MSG_JOIN_REQUEST, payload))
-        
+
         # Wait for connection response
         print(f"Connecting to server at {SERVER_IP}:{SERVER_PORT} with ID {self.client_id}...")
         start_time = time.time()
@@ -80,7 +82,7 @@ class Client:
                     print("Player id already running")
                     self.gui.shutdown()
                     sys.exit(1)
-            
+
             if connected:
                 break
             else:
@@ -101,10 +103,10 @@ class Client:
 
     def network_loop(self):
         now = time.time()
-        
+
         # Update simulated socket (processes sends and receives)
         packets = self.sock.update()
-        
+
         for data, addr in packets:
             self.process_packet(data)
 
@@ -128,10 +130,10 @@ class Client:
 
         elif msg_type == network.MSG_PONG:
             ts = struct.unpack('!d', payload[:8])[0] # Server echoed same timestamp
-            self.rtt = time.time() - ts # approximate RTT = now - sent_time
+            self.rtt = time.time() - ts # Approximate RTT = now - sent_time
 
         elif msg_type == network.MSG_WORLD_SNAPSHOT:
-            # parse snapshot:
+            # Parse snapshot
             # payload: server_time(double) | num_players(uint32) | players... | num_coins(uint32) | coins...
             off = 0
             server_time = struct.unpack_from('!d', payload, off)[0]; off += 8
@@ -148,7 +150,7 @@ class Client:
                 off += struct.calcsize('!Iff')
                 coins.append((cid, cx, cy))
 
-            # push snapshot (server_time is authoritative)
+            # Push snapshot (server_time is authoritative)
             s = Snapshot(server_time, players, coins)
 
             # If snapshot arrives out of order, ignore it
@@ -161,7 +163,7 @@ class Client:
             if self.debug_show_server:
                 self.last_raw_snapshot = s
 
-            # reconciliation for local player
+            # Reconciliation for local player
             if self.client_id in players:
                 sx, sy, sscore, last_seq = players[self.client_id]
                 # accept server position as baseline
@@ -202,7 +204,7 @@ class Client:
                     p['t0'] = now_local
                     p['t1'] = now_local + INTERPOLATION_DELAY
 
-            # update coins
+            # Update coins
             self.coins = [(cx, cy) for (_, cx, cy) in coins]
 
     def run(self):
@@ -217,13 +219,13 @@ class Client:
             if glfw.get_key(self.gui.window, glfw.KEY_UP) == glfw.PRESS: dy += 1
             if glfw.get_key(self.gui.window, glfw.KEY_DOWN) == glfw.PRESS: dy -= 1
 
-            if dx != 0 or dy != 0: # normalize speed
+            if dx != 0 or dy != 0: # Normalize speed
                 l = math.hypot(dx, dy)
                 dxn, dyn = dx / l, dy / l
                 self.local_x += dxn * PLAYER_SPEED * (1.0 / 60.0)
                 self.local_y += dyn * PLAYER_SPEED * (1.0 / 60.0)
 
-                # send input command with seq and client timestamp
+                # Send input command with seq and client timestamp
                 self.input_seq += 1
                 self.pending_inputs.append((self.input_seq, dxn, dyn, time.time()))
                 payload = struct.pack('!Iffd', self.input_seq, dxn, dyn, time.time())
@@ -291,7 +293,7 @@ class Client:
 
             self.gui.end_frame()
             time.sleep(1/60)
-    
+
     def close(self):
         # Send info to server about disconnecting
         payload = struct.pack('!I', self.client_id)
@@ -303,7 +305,7 @@ class Client:
 
     @staticmethod
     def get_player_color(client_id):
-        h = random.Random(client_id * 9973).random()  # consistent per client_id
+        h = random.Random(client_id * 9973).random()  # Consistent per client_id
         r, g, b = colorsys.hsv_to_rgb(h, 0.5, 0.6)
         return (r, g, b)
 

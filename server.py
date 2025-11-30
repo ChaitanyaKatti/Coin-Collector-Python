@@ -1,9 +1,10 @@
+import math
+import random
 import socket
+import struct
 import threading
 import time
-import struct
-import random
-import math
+
 import network
 from player import Player
 from world import Coin
@@ -67,7 +68,7 @@ class GameServer:
         if msg_type == network.MSG_JOIN_REQUEST:
             # payload: desired client id (uint32)
             client_id = struct.unpack_from('!I', payload, 0)[0]
-            
+
             with self.lock:
                 if client_id in self.client_id_map: # ID already taken
                     self.sock.sendto(network.pack_message(network.MSG_JOIN_REJECT), addr)
@@ -129,7 +130,7 @@ class GameServer:
                 p.inputs.pop(0)
                 continue
 
-            if seq != p.last_seq + 1: # out of order packet
+            if seq != p.last_seq + 1: # Out-of-order packet
                 last_recv = self.last_client_recv.get(p.addr, 0.0)
                 print(f"Out of order input from player {p.id}: expected {p.last_seq + 1}, got {seq}. [HIGH VARIABILITY IN LATENCY]")
                 # Check if too much time has passed since last in-order packet
@@ -137,17 +138,17 @@ class GameServer:
                     print(f"Skipping to seq {seq} for player {p.id} due to timeout")
                     p.last_seq = seq - 1
                 else:
-                    break # exit loop, wait for in-order packet
+                    break # Exit loop, wait for in-order packet
             else:
                 self.last_client_recv[p.addr] = time.time()
-  
+
             p.inputs.pop(0)
 
-            if dx != 0 or dy != 0: # mark movement for collision logic
+            if dx != 0 or dy != 0: # Mark movement for collision logic
                 moved = True
                 last_dx, last_dy = dx, dy
 
-            # apply movement
+            # Apply movement
             norm = math.hypot(dx, dy)
             if norm > 0:
                 dxn, dyn = dx / norm, dy / norm
@@ -155,7 +156,7 @@ class GameServer:
                 p.y += dyn * PLAYER_SPEED * (1.0 / 60.0)
 
             p.last_seq = max(p.last_seq, seq)
-        
+
         p._moved = moved
         p._last_dir = (last_dx, last_dy)
 
@@ -194,7 +195,7 @@ class GameServer:
                     a_moved = a._moved
                     b_moved = b._moved
 
-                    # weight rules:
+                    # Weight rules
                     if a_moved and not b_moved:
                         w_a, w_b = 1.0, 0.0
                     elif b_moved and not a_moved:
@@ -210,7 +211,7 @@ class GameServer:
                     b.x += nx * overlap * w_b
                     b.y += ny * overlap * w_b
 
-            # clamp to bounds
+            # Clamp to bounds
             a.x = max(-1 + PLAYER_RADIUS + BORDER_SIZE, min(1-PLAYER_RADIUS-BORDER_SIZE, a.x))
             a.y = max(-1 + PLAYER_RADIUS + BORDER_SIZE, min(1-PLAYER_RADIUS-BORDER_SIZE, a.y))
 

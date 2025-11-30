@@ -1,9 +1,11 @@
+import math
+
 import glfw
 import imgui
-from imgui.integrations.glfw import GlfwRenderer
 import OpenGL.GL as gl
+from imgui.integrations.glfw import GlfwRenderer
 from PIL import Image
-import math
+
 
 class GUI:
     def __init__(self, width, height, title):
@@ -11,7 +13,7 @@ class GUI:
         self.height = height
         self.window = self.init_glfw(width, height, title)
         self.impl = GlfwRenderer(self.window)
-        
+
     def init_glfw(self, width, height, title):
         if not glfw.init():
             print("Failed to initialize GLFW")

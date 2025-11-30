@@ -21,8 +21,8 @@ A real-time multiplayer Coin Collector game using Python, UDP, and OpenGL (via g
 
    ```bash
    # Create virtual environment, use 3.11+
-   python3.11 -m venv venv 
-   
+   python3.11 -m venv venv
+
    # Activate virtual environment
    source venv/bin/activate  # Linux/Mac
    venv\Scripts\activate  # Windows
