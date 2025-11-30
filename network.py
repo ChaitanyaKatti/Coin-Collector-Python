@@ -1,4 +1,4 @@
-import socket
+import heapq
 import time
 import random
 
@@ -38,46 +38,36 @@ class SimulatedSocket:
         self.sock = sock
         self.latency = latency
         self.jitter = jitter
-        self.queue = [] # (time, type, data, addr)
+        self.queue = []  # heap of (time, type, data, addr)
 
     def sendto(self, data, addr):
-        delay = max(0, random.gauss(self.latency, self.jitter))
-        self.queue.append((time.time() + delay, 'send', data, addr))
+        delay = random.uniform(max(self.latency - self.jitter, 0),
+                                   self.latency + self.jitter)
+        heapq.heappush(self.queue, (time.time() + delay, 'send', data, addr))
 
     def update(self):
-        """
-        Reads from real socket, queues incoming with delay.
-        Processes queue: sends ready 'send' packets, returns ready 'recv' packets.
-        Returns list of (data, addr) for received packets.
-        """
         now = time.time()
-        
-        # 1. Read from real socket and queue
+
+        # Read from real socket & queue
         try:
             while True:
                 data, addr = self.sock.recvfrom(65536)
-                delay = max(0, random.gauss(self.latency, self.jitter))
-                self.queue.append((now + delay, 'recv', data, addr))
+                delay = random.uniform(max(self.latency - self.jitter, 0),
+                                           self.latency + self.jitter)
+                heapq.heappush(self.queue, (now + delay, 'recv', data, addr))
         except BlockingIOError:
             pass
-        except Exception:
-            pass
-            
-        # 2. Process queue
+
         ready_packets = []
-        remaining = []
-        
-        for t, type_, data, addr in self.queue:
-            if now >= t:
-                if type_ == 'send':
-                    try:
-                        self.sock.sendto(data, addr)
-                    except Exception:
-                        pass
-                elif type_ == 'recv':
-                    ready_packets.append((data, addr))
+        # Process all events whose time has passed
+        while self.queue and self.queue[0][0] <= now: # Peek the latest scheduled packet
+            t, type_, data, addr = heapq.heappop(self.queue) # Pop the packet
+            if type_ == 'send':
+                try:
+                    self.sock.sendto(data, addr) # Send the packet through the real socket
+                except Exception:
+                    pass
             else:
-                remaining.append((t, type_, data, addr))
-        
-        self.queue = remaining
+                ready_packets.append((data, addr)) # Collect received packets
+
         return ready_packets
