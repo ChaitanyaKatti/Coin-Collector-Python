@@ -4,7 +4,7 @@ import random
 
 # Framing constants
 HEADER_SIZE = 8
-CLASS_ID_SIZE = 3
+MSG_TYPE_SIZE = 3
 
 # Message class IDs
 MSG_JOIN_REQUEST = 1
@@ -14,21 +14,22 @@ MSG_WORLD_SNAPSHOT = 4
 MSG_COMMAND = 5
 MSG_PING = 6
 MSG_CLOSE = 7
+MSG_JOIN_REJECT = 8
 
-def pack_message(class_id, payload=b''):
-    body = f"{class_id:03}".encode('ascii') + payload
+def pack_message(msg_type, payload=b''):
+    body = f"{msg_type:03}".encode('ascii') + payload
     header = f"{len(body):08}".encode('ascii')
     return header + body
 
 def unpack_message(data):
-    if len(data) < HEADER_SIZE + CLASS_ID_SIZE:
+    if len(data) < HEADER_SIZE + MSG_TYPE_SIZE:
         return None, None
     try:
         body_size = int(data[:HEADER_SIZE].decode('ascii'))
         body = data[HEADER_SIZE:HEADER_SIZE + body_size]
-        class_id = int(body[:CLASS_ID_SIZE].decode('ascii'))
-        payload = body[CLASS_ID_SIZE:]
-        return class_id, payload
+        msg_type = int(body[:MSG_TYPE_SIZE].decode('ascii'))
+        payload = body[MSG_TYPE_SIZE:]
+        return msg_type, payload
     except ValueError:
         return None, None
 
@@ -65,12 +66,6 @@ class SimulatedSocket:
         # 2. Process queue
         ready_packets = []
         remaining = []
-        
-        # Sort queue by time to ensure order? 
-        # The original code didn't sort, just iterated. 
-        # But for correctness, if latency varies, packets might reorder.
-        # The original code: for t, item in self.recv_queue[:]
-        # It iterated list. If multiple ready, it processed them.
         
         for t, type_, data, addr in self.queue:
             if now >= t:
