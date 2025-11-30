@@ -2,6 +2,8 @@
 
 A real-time multiplayer Coin Collector game using Python, UDP, and OpenGL (via glfw/imgui).
 
+Video Presentation: [Youtube Link](https://www.youtube.com/watch?v=u_TUeY2vuqM)
+
 ## Demo
 <p align="center">
   <img src="./assets/demo.gif" alt="Demo Video">
@@ -80,3 +82,4 @@ Adapted from:
 - [Overwatch Gameplay Architecture and Netcode, Tim Ford, GDC 2017](https://www.youtube.com/watch?v=W3aieHjyNvw&t=2275s)
 - [Networking for Virtual Worlds](https://youtube.com/playlist?list=PLoRL6aS9crowO6h2SL7k9lUV5eeC6uqnx&si=XM3P13_WeqbMQINY)
 - [Game Networking Articles by Glenn Fiedler](https://gafferongames.com/categories/networking/)
+- [Fast-Paced Multiplayer Series by Gabriel Gambetta](https://www.gabrielgambetta.com/client-server-game-architecture.html)
