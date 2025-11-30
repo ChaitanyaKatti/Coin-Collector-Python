@@ -3,6 +3,7 @@
 A real-time multiplayer Coin Collector game using Python, UDP, and OpenGL (via glfw/imgui).
 
 ## Requirements
+
 - Python 3.11+
 - `glfw`
 - `imgui[glfw]`
