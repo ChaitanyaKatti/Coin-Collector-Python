@@ -100,4 +100,5 @@ class GUI:
         sx = (x + 1) * self.width / 2
         sy = (1 - y) * self.height / 2
         text_width = imgui.calc_text_size(text).x
-        draw_list.add_text(sx - text_width/2, sy - 10, 0xFFFFFFFF, text)
+        text_height = imgui.calc_text_size(text).y
+        draw_list.add_text(sx - text_width/2+1, sy - text_height/2, 0xFFFFFFFF, text)
