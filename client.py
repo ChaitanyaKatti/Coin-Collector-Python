@@ -19,7 +19,8 @@ SERVER_IP = "127.0.0.1"
 SERVER_PORT = 9999
 WIDTH, HEIGHT = 720, 720
 INTERPOLATION_DELAY = 0.15  # seconds
-PLAYER_RADIUS = 0.05
+PLAYER_RADIUS = 0.075
+PLAYER_SPEED = 1.0  # units per second
 COIN_RADIUS = 0.05
 
 class Client:
@@ -29,7 +30,7 @@ class Client:
         # Networking
         real_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         real_sock.setblocking(False)
-        self.sock = network.SimulatedSocket(real_sock, latency=0.05, jitter=0.0)
+        self.sock = network.SimulatedSocket(real_sock, latency=0.200, jitter=0.010)
         
         self.server_addr = (SERVER_IP, SERVER_PORT)
 
@@ -49,7 +50,7 @@ class Client:
 
         # Snapshots for interpolation
         self.snapshots = deque(maxlen=64)  # list of Snapshot ordered by server_time
-        self.debug_show_server = False
+        self.debug_show_server = True
         self.last_raw_snapshot = None  # store real-time snapshot (no delay)
 
         # GUI
@@ -59,6 +60,35 @@ class Client:
         # register (join)
         payload = struct.pack('!I', self.client_id)
         self.send_packet(network.pack_message(network.MSG_JOIN_REQUEST, payload))
+        
+        # Wait for connection response
+        print(f"Connecting to server at {SERVER_IP}:{SERVER_PORT} with ID {self.client_id}...")
+        start_time = time.time()
+        connected = False
+        while time.time() - start_time < 2.0: # 2 second timeout
+            # pump network
+            packets = self.sock.update()
+            for data, addr in packets:
+                msg_type, payload = network.unpack_message(data)
+                if msg_type == network.MSG_SERVER_ACCEPT:
+                    assigned = struct.unpack('!I', payload[:4])[0]
+                    if assigned == self.client_id:
+                        print(f"Successfully connected. Assigned ID: {assigned}")
+                        connected = True
+                        break
+                elif msg_type == network.MSG_JOIN_REJECT:
+                    print("Player id already running")
+                    self.gui.shutdown()
+                    sys.exit(1)
+            
+            if connected:
+                break
+            time.sleep(0.01)
+            
+        if not connected:
+            print("Server not connected")
+            self.gui.shutdown()
+            sys.exit(1)
 
     def load_assets(self):
         self.bg_tex = self.gui.load_texture("assets/background.png")
@@ -77,16 +107,16 @@ class Client:
             self.process_packet(data)
 
         # periodic ping for RTT every second
-        if now - self.last_ping > 1.0:
+        if now - self.last_ping > 1000.0:
             payload = struct.pack('!d', time.time()) # Pack current time into ping payload
             self.send_packet(network.pack_message(network.MSG_PING, payload))
             self.last_ping = now
 
     def process_packet(self, data):
-        class_id, payload = network.unpack_message(data)
-        if class_id is None:
+        msg_type, payload = network.unpack_message(data)
+        if msg_type is None:
             return
-        if class_id == network.MSG_SERVER_ACCEPT:
+        if msg_type == network.MSG_SERVER_ACCEPT:
             # payload: assigned_id (uint32)
             assigned = struct.unpack('!I', payload[:4])[0]
             # server might reassign. for our simple client ignore if differs
@@ -94,11 +124,11 @@ class Client:
             if assigned != self.client_id:
                 self.client_id = assigned
 
-        elif class_id == network.MSG_PONG:
+        elif msg_type == network.MSG_PONG:
             ts = struct.unpack('!d', payload[:8])[0] # Server echoed same timestamp
             self.rtt = time.time() - ts # approximate RTT = now - sent_time
 
-        elif class_id == network.MSG_WORLD_SNAPSHOT:
+        elif msg_type == network.MSG_WORLD_SNAPSHOT:
             # parse snapshot:
             # payload: server_time(double) | num_players(uint32) | players... | num_coins(uint32) | coins...
             off = 0
@@ -118,11 +148,16 @@ class Client:
 
             # push snapshot (server_time is authoritative)
             s = Snapshot(server_time, players, coins)
+
+            # If snapshot arrives out of order, ignore it
+            if self.snapshots and s.server_time <= self.snapshots[-1].server_time:
+                return
+
             self.snapshots.append(s)
 
             #  Store the server snapshot directly for debugging
             if self.debug_show_server:
-                self.last_raw_snapshot = Snapshot(server_time, players, coins)
+                self.last_raw_snapshot = s
 
             # reconciliation for local player
             if self.client_id in players:
@@ -134,7 +169,7 @@ class Client:
                 # remove pending inputs up to last_seq and reapply remaining
                 remaining = []
                 for seq, dx, dy, ts in self.pending_inputs:
-                    if seq <= last_seq:
+                    if seq <= last_seq: # already processed by server
                         continue
                     remaining.append((seq, dx, dy, ts))
                 self.pending_inputs = remaining
@@ -144,14 +179,13 @@ class Client:
                     norm = math.hypot(dx, dy)
                     if norm > 0:
                         dxn, dyn = dx/norm, dy/norm
-                        speed = 1.0
-                        self.local_x += dxn * speed * dt
-                        self.local_y += dyn * speed * dt
+                        self.local_x += dxn * PLAYER_SPEED * dt
+                        self.local_y += dyn * PLAYER_SPEED * dt
 
             # update remote players interpolation targets
             now_local = time.time()
             for pid, (x, y, score, last_seq) in players.items():
-                if pid == self.client_id:
+                if pid == self.client_id: # Do not interpolate local player
                     continue
                 if pid not in self.players:
                     # initialize interpolation state (snap->target)
@@ -181,12 +215,11 @@ class Client:
             if glfw.get_key(self.gui.window, glfw.KEY_UP) == glfw.PRESS: dy += 1
             if glfw.get_key(self.gui.window, glfw.KEY_DOWN) == glfw.PRESS: dy -= 1
 
-            speed = 1.0 * (1.0 / 60.0)
             if dx != 0 or dy != 0: # normalize speed
                 l = math.hypot(dx, dy)
                 dxn, dyn = dx / l, dy / l
-                self.local_x += dxn * speed
-                self.local_y += dyn * speed
+                self.local_x += dxn * PLAYER_SPEED * (1.0 / 60.0)
+                self.local_y += dyn * PLAYER_SPEED * (1.0 / 60.0)
 
                 # send input command with seq and client timestamp
                 self.input_seq += 1
@@ -240,18 +273,20 @@ class Client:
 
             # UI
             imgui.begin("Debug")
-            imgui.text(f"FPS: {imgui.get_io().framerate:.1f}")
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 1.0, 0.0)
             imgui.text(f"Score: {self.score}")
+            imgui.pop_style_color()
+            imgui.text(f"FPS: {imgui.get_io().framerate:.1f}")
             imgui.text(f"RTT (estimated): {self.rtt*1000:.1f}ms")
-            imgui.text(f"Latency(RTT) (sim): {self.sock.latency*1000:.1f}ms")
-            imgui.text(f"Jitter (sim): {self.sock.jitter*1000:.1f}ms")
+            imgui.text(f"Latency: {self.sock.latency*1000:.1f}ms")
+            imgui.text(f"Jitter : {self.sock.jitter*1000:.1f}ms")
             _, self.sock.latency = imgui.slider_float("Latency (s)", self.sock.latency, 0.0, 1.0)
             _, self.sock.jitter = imgui.slider_float("Jitter (s)", self.sock.jitter, 0.0, 0.1)
             _, self.debug_show_server = imgui.checkbox("Show Server Debug Positions", self.debug_show_server)
             imgui.end()
 
             self.gui.end_frame()
-            time.sleep(1/120)
+            time.sleep(1/60)
     
     def close(self):
         # Send info to server about disconnecting
@@ -264,7 +299,7 @@ class Client:
 
     @staticmethod
     def get_player_color(client_id):
-        h = (client_id * 0.618033988749895) % 1.0  # golden ratio conjugate
+        h = random.Random(client_id).random()  # consistent per client_id
         r, g, b = colorsys.hsv_to_rgb(h, 0.5, 0.5)
         return (r, g, b)
 

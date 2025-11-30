@@ -12,13 +12,16 @@ A real-time multiplayer Coin Collector game using Python, UDP, and OpenGL (via g
 ## Setup
 1. Create a virtual environment:
    ```bash
-   python -m venv venv
+   # Create virtual environment, use 3.11+
+   python3.11 -m venv venv 
+   
+   # Activate virtual environment
    source venv/bin/activate  # Linux/Mac
-   # venv\Scripts\activate  # Windows
+   venv\Scripts\activate  # Windows
    ```
 2. Install dependencies:
    ```bash
-   pip install 'imgui[glfw]' glfw PyOpenGL Pillow
+   pip install -r requirements.txt
    ```
 
 ## Running the Game

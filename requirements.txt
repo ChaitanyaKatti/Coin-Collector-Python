@@ -1,3 +1,4 @@
-imgui[glfw]
 glfw
+imgui[glfw]
+pillow
 pyopengl
